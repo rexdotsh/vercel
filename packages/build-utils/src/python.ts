@@ -51,6 +51,33 @@ export async function getDjangoSettingsModule(
 }
 
 /**
+ * Read Procfile at workPath and parse the web process command for a Python
+ * app. Supports "web: gunicorn <module>" or "web: gunicorn <module>:<attr>",
+ * and "web: uvicorn <module>" or "web: uvicorn <module>:<attr>". Returns the
+ * corresponding Python file path (e.g. "myapp/wsgi.py") or null if not found or unreadable.
+ */
+export async function getProcfileWebEntrypoint(
+  workPath: string
+): Promise<string | null> {
+  const procfilePath = join(workPath, 'Procfile');
+  try {
+    const procfileContent = await fs.promises.readFile(procfilePath, 'utf-8');
+    const pyId = '[A-Za-z_][A-Za-z0-9_]*';
+    const appSpecPattern = `${pyId}(?:\\.${pyId})*(?::${pyId})?`;
+    const match = procfileContent.match(
+      new RegExp(`web:\\s*(?:gunicorn|uvicorn)\\s+(${appSpecPattern})`)
+    );
+    if (match) {
+      const modulePath = match[1].split(':')[0];
+      return `${modulePath.replace(/\./g, '/')}.py`;
+    }
+  } catch {
+    debug('Procfile not found or unreadable, skipping Procfile web entrypoint');
+  }
+  return null;
+}
+
+/**
  * For Django projects: resolve the WSGI application entrypoint by reading
  * DJANGO_SETTINGS_MODULE from manage.py, loading that settings file, and
  * returning the file path for WSGI_APPLICATION (e.g. 'myapp.wsgi.application'
